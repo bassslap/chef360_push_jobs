@@ -1,0 +1,51 @@
+/*************************************
+      Chef Push Jobs Replacement - Jenkins on Proxmox
+      Copy this file to terraform.tfvars and fill in your values.
+**************************************/
+
+// Proxmox Configuration
+proxmox = {
+  // Proxmox API endpoint
+  endpoint = "https://192.168.220.200:8006"
+
+  // API Token ID (format: user@realm!token-name)
+  api_token_id = "terraform@pve!terraform"
+
+  // API Token Secret (the UUID part)
+  api_token_secret = "xxxxxxxxxxxxxxxxxxxx"
+
+  // Node name in Proxmox
+  node_name = "proxmox"
+
+  // SSH public key file path
+  public_key_file = "~/.ssh/id_rsa.pub"
+
+  // Existing Ubuntu 22.04 cloud-init template VM ID
+  template_id = 9000
+}
+
+// Networking Configuration
+networking = {
+  bridge      = "vmbr0"
+  storage     = "local-lvm"
+  node_name   = "proxmox"
+  vlan_tag    = 0
+  gateway     = "192.168.220.1"
+  dns_servers = ["8.8.8.8", "8.8.4.4"]
+  subnet_bits = 23
+}
+
+// VM Credentials
+proxmox_credentials = {
+  vm_user     = "ubuntu"
+  vm_password = "ubuntu123!"
+}
+
+// Jenkins CI Server
+jenkins = {
+  vm_id        = 104
+  cores        = 2
+  memory       = 4096
+  disk_size_gb = 40
+  ip_address   = "192.168.220.130"
+}

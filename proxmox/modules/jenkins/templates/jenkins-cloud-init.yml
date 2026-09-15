@@ -1,0 +1,92 @@
+#cloud-config
+hostname: ${hostname}
+fqdn: ${hostname}
+
+system_info:
+  default_user:
+    name: ubuntu
+    plain_text_passwd: ubuntu123!
+    lock_passwd: false
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    shell: /bin/bash
+
+users:
+  - name: ubuntu
+    plain_text_passwd: ubuntu123!
+    shell: /bin/bash
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    lock_passwd: false
+    home: /home/ubuntu
+    ssh_authorized_keys:
+      - ${ssh_public_key}
+
+ssh_pwauth: true
+
+chpasswd:
+  expire: false
+  users:
+    - name: ubuntu
+      password: ubuntu123!
+      type: text
+
+write_files:
+  - path: /etc/netplan/01-netcfg.yaml
+    content: |
+      network:
+        version: 2
+        ethernets:
+          ens18:
+            dhcp4: false
+            addresses:
+              - ${ip_address}/${subnet_bits}
+            routes:
+              - to: default
+                via: ${gateway}
+            nameservers:
+              addresses:
+%{ for server in dns_servers ~}
+                - ${server}
+%{ endfor ~}
+    permissions: '0644'
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - curl
+  - wget
+  - unzip
+  - jq
+  - openssh-server
+
+runcmd:
+  # Network setup
+  - netplan apply
+  - systemctl restart systemd-networkd
+  # User setup
+  - echo 'ubuntu:ubuntu123!' | chpasswd
+  - passwd -u ubuntu
+  - usermod -aG sudo ubuntu
+  - usermod -s /bin/bash ubuntu
+  - mkdir -p /home/ubuntu/.ssh
+  - chown ubuntu:ubuntu /home/ubuntu/.ssh
+  - chmod 700 /home/ubuntu/.ssh
+  # SSH setup
+  - systemctl enable ssh
+  - systemctl start ssh
+  - systemctl restart ssh
+  - systemctl enable getty@tty1.service
+  - systemctl start getty@tty1.service
+  # Jenkins/Docker install
+  - printf '%s' "${user_data_script}" | base64 -d > /tmp/jenkins-install.sh
+  - chmod +x /tmp/jenkins-install.sh
+  - nohup /tmp/jenkins-install.sh > /var/log/jenkins-install-run.log 2>&1 &
+  - echo "Jenkins VM setup completed at $(date)" >> /var/log/setup-debug.log
+
+ssh_deletekeys: false
+ssh_genkeytypes: ['rsa', 'ecdsa', 'ed25519']
+
+disable_root: false
+ssh_authorize_keys: true
+
+final_message: "Jenkins cloud-init completed. Login: ubuntu/ubuntu123! Jenkins UI: http://${ip_address}:8080"

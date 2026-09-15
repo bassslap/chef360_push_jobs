@@ -1,0 +1,47 @@
+// Chef Push Jobs replacement: force a chef-client run on 1..n nodes via the
+// Chef 360 Courier orchestrator API.
+//
+// Required Jenkins credentials (Manage Jenkins > Credentials):
+//   chef360-api-key     (Secret text) - Courier API key
+//   chef360-api-secret  (Secret text) - Courier API secret
+pipeline {
+  agent any
+
+  parameters {
+    string(name: 'CHEF360_BASE_URL', defaultValue: 'https://chef360.slaplabs.us', description: 'Base URL of the Chef 360 platform (courier API gateway)')
+    string(name: 'CHEF360_ORG_ID', defaultValue: '', description: 'Chef 360 organization UUID')
+    string(name: 'CHEF360_TENANT_ID', defaultValue: '', description: 'Chef 360 tenant UUID')
+    text(name: 'NODE_IDS', defaultValue: '', description: 'Node UUIDs to run chef-client on, one per line or comma-separated (1..n nodes)')
+    choice(name: 'EXECUTION_TYPE', choices: ['parallel', 'sequential'], description: 'How distribution groups are executed')
+    string(name: 'BATCH_VALUE', defaultValue: '', description: 'Number of nodes to run concurrently (blank = all nodes at once)')
+    string(name: 'TIMEOUT_SECONDS', defaultValue: '900', description: 'Per-node timeout in seconds for the chef-client run')
+    booleanParam(name: 'WAIT_FOR_COMPLETION', defaultValue: true, description: 'Poll Courier state service until the job instance completes')
+  }
+
+  stages {
+    stage('Force chef-client run') {
+      steps {
+        withCredentials([
+          string(credentialsId: 'chef360-api-key', variable: 'CHEF360_API_KEY'),
+          string(credentialsId: 'chef360-api-secret', variable: 'CHEF360_API_SECRET')
+        ]) {
+          sh '''
+            set -e
+            export CHEF360_BASE_URL="${CHEF360_BASE_URL}"
+            export CHEF360_ORG_ID="${CHEF360_ORG_ID}"
+            export CHEF360_TENANT_ID="${CHEF360_TENANT_ID}"
+            export NODE_IDS="$(echo "${NODE_IDS}" | tr '\\n' ',')"
+            export EXECUTION_TYPE="${EXECUTION_TYPE}"
+            export TIMEOUT_SECONDS="${TIMEOUT_SECONDS}"
+            export POLL_FOR_COMPLETION="${WAIT_FOR_COMPLETION}"
+            if [ -n "${BATCH_VALUE}" ]; then
+              export BATCH_VALUE="${BATCH_VALUE}"
+            fi
+            chmod +x jenkins/scripts/force-chef-client-run.sh
+            ./jenkins/scripts/force-chef-client-run.sh
+          '''
+        }
+      }
+    }
+  }
+}

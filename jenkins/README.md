@@ -27,6 +27,32 @@ completion.
    - `CHEF360_ORG_ID` / `CHEF360_TENANT_ID` — from your Chef 360 org
    - `NODE_IDS` — one or more node UUIDs (from the Node Management API/UI)
 
+## Creating the Chef 360 credential for Jenkins
+
+Jenkins does not need to be an enrolled node, and no separate courier
+workstation is required — it authenticates to the Courier orchestrator API
+directly as a service identity using an Application Key (`accessKey`/
+`secretKey`), sent as the `api-key`/`api-secret` headers.
+
+Run `jenkins/scripts/create-chef360-application-key.sh` once (from a machine
+with access to your Chef 360 tenant) to mint that key:
+
+```bash
+export CHEF360_BASE_URL=https://chef360.slaplabs.us
+export CHEF360_TENANT_ID=<tenant-uuid>
+export CHEF360_EMAIL=<admin-user-email>
+export CHEF360_PASSWORD=<admin-user-password>
+export COHORT_ID=<application-cohort-uuid>
+export ROLE_ID=<role-uuid-to-grant>
+./jenkins/scripts/create-chef360-application-key.sh
+```
+
+The script logs in, exchanges the oauth code for a JWT, then calls
+`POST /application-key` to create a scoped, expiring automation credential.
+The `secretKey` is only shown once — copy it immediately into the
+`chef360-api-secret` Jenkins credential (and `accessKey` into
+`chef360-api-key`).
+
 ## Verify before first real run
 
 - `INTERPRETER_NAME`/version bounds in the script default to

@@ -8,8 +8,8 @@ pipeline {
   agent any
 
   parameters {
-    string(name: 'CHEF360_BASE_URL', defaultValue: 'https://chef360.slaplabs.us', description: 'Base URL of the Chef 360 platform (courier API gateway)')
-    string(name: 'CHEF360_ORG_ID', defaultValue: '', description: 'Chef 360 organization UUID')
+    string(name: 'CHEF360_BASE_URL', defaultValue: 'https://internal.cloud.chef.io', description: 'Base URL of the Chef 360 platform (courier API gateway)')
+    string(name: 'CHEF360_ORG_ID', defaultValue: '', description: 'Chef 360 organization UUID for the "phillips-sa" org (resolve with jenkins/scripts/resolve-chef360-org-id.sh)')
     string(name: 'CHEF360_TENANT_ID', defaultValue: '', description: 'Chef 360 tenant UUID')
     text(name: 'NODE_IDS', defaultValue: '', description: 'Node UUIDs to run chef-client on, one per line or comma-separated (1..n nodes). Leave blank to target nodes by tag instead.')
     string(name: 'TAG_NAME', defaultValue: 'role', description: 'Node tag name to target when NODE_IDS is blank')

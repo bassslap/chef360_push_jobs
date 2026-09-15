@@ -33,6 +33,34 @@ Verify the `tags` namespace name against your tenant (Node Management API →
 `GET /nodes/{nodeId}` shows a node's attributes/namespaces) and override with
 `TAG_NAMESPACE` if it differs.
 
+## Shared Chef 360 host: internal.cloud.chef.io
+
+`https://internal.cloud.chef.io` is a **shared, multi-tenant** Chef 360
+instance — it hosts other orgs besides ours (`phillips-sa`). Every API call
+in this pipeline requires explicit `CHEF360_ORG_ID`/`CHEF360_TENANT_ID`
+values (there is no default), and every request sends them as the
+`OrganizationId`/`TenantId` headers, so a run can never silently fall through
+to another org's nodes. Always resolve and pass the `phillips-sa` UUIDs
+explicitly — see below.
+
+### Resolving the phillips-sa org/tenant UUIDs
+
+Run `jenkins/scripts/resolve-chef360-org-id.sh` once to look up the UUIDs for
+our org by name:
+
+```bash
+export CHEF360_BASE_URL=https://internal.cloud.chef.io
+export CHEF360_EMAIL=<your-email>
+export CHEF360_PASSWORD=<your-password>
+export ORG_NAME=phillips-sa
+./jenkins/scripts/resolve-chef360-org-id.sh
+# tenantId=<uuid> orgId=<uuid>
+```
+
+Use the printed `tenantId`/`orgId` as the `CHEF360_TENANT_ID`/`CHEF360_ORG_ID`
+job parameters (or set them as the Jenkins job's default parameter values so
+runners don't have to look them up each time).
+
 ## Jenkins setup
 
 1. Create a new Pipeline job pointing at `jenkins/Jenkinsfile` in this repo.
@@ -40,8 +68,9 @@ Verify the `tags` namespace name against your tenant (Node Management API →
    - `chef360-api-key`
    - `chef360-api-secret`
 3. Run the job with parameters:
-   - `CHEF360_BASE_URL` — Chef 360 API gateway base URL
-   - `CHEF360_ORG_ID` / `CHEF360_TENANT_ID` — from your Chef 360 org
+   - `CHEF360_BASE_URL` — `https://internal.cloud.chef.io`
+   - `CHEF360_ORG_ID` / `CHEF360_TENANT_ID` — the `phillips-sa` UUIDs resolved
+     above (required every run — there is no default)
    - `NODE_IDS` — one or more node UUIDs (from the Node Management API/UI),
      or leave blank and use `TAG_NAME`/`TAG_VALUE` to target by tag
 
@@ -56,8 +85,8 @@ Run `jenkins/scripts/create-chef360-application-key.sh` once (from a machine
 with access to your Chef 360 tenant) to mint that key:
 
 ```bash
-export CHEF360_BASE_URL=https://chef360.slaplabs.us
-export CHEF360_TENANT_ID=<tenant-uuid>
+export CHEF360_BASE_URL=https://internal.cloud.chef.io
+export CHEF360_TENANT_ID=<phillips-sa-tenant-uuid>
 export CHEF360_EMAIL=<admin-user-email>
 export CHEF360_PASSWORD=<admin-user-password>
 export COHORT_ID=<application-cohort-uuid>

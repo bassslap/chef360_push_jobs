@@ -6,11 +6,11 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.cloudbees.plugins.credentials.CredentialsProvider;
 import com.cloudbees.plugins.credentials.common.StandardListBoxModel;
-import com.cloudbees.plugins.credentials.domains.URIRequirementBuilder;
 import hudson.Extension;
 import hudson.FilePath;
 import hudson.Launcher;
 import hudson.model.AbstractProject;
+import hudson.model.Item;
 import hudson.model.Run;
 import hudson.model.TaskListener;
 import hudson.security.ACL;
@@ -18,11 +18,14 @@ import hudson.tasks.BuildStepDescriptor;
 import hudson.tasks.Builder;
 import hudson.util.FormValidation;
 import hudson.util.ListBoxModel;
+import jenkins.model.Jenkins;
 import jenkins.tasks.SimpleBuildStep;
 import org.jenkinsci.plugins.plaincredentials.StringCredentials;
+import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.QueryParameter;
+import org.kohsuke.stapler.verb.POST;
 
 import java.io.IOException;
 import java.io.PrintStream;
@@ -323,17 +326,25 @@ public class ForceChefClientRunBuilder extends Builder implements SimpleBuildSte
             return FormValidation.ok();
         }
 
-        public ListBoxModel doFillCredentialsIdItems(@QueryParameter String credentialsId) {
+        @POST
+        public ListBoxModel doFillCredentialsIdItems(@AncestorInPath Item item, @QueryParameter String credentialsId) {
             StandardListBoxModel result = new StandardListBoxModel();
-            return result
-                    .includeEmptyValue()
-                    .includeMatchingAs(
-                            ACL.SYSTEM2,
-                            jenkins.model.Jenkins.get(),
-                            StringCredentials.class,
-                            URIRequirementBuilder.fromUri("").build(),
-                            com.cloudbees.plugins.credentials.CredentialsMatchers.always())
-                    .includeCurrentValue(credentialsId);
+            if (item == null) {
+                if (!Jenkins.get().hasPermission(Jenkins.ADMINISTER)) {
+                    return result.includeCurrentValue(credentialsId);
+                }
+            } else {
+                if (!item.hasPermission(Item.EXTENDED_READ) && !item.hasPermission(CredentialsProvider.USE_ITEM)) {
+                    return result.includeCurrentValue(credentialsId);
+                }
+            }
+            var result2 = result.includeEmptyValue();
+            if (item != null) {
+                result2 = result2.includeAs(ACL.SYSTEM2, item, StringCredentials.class);
+            } else {
+                result2 = result2.includeAs(ACL.SYSTEM2, Jenkins.get(), StringCredentials.class);
+            }
+            return result2.includeCurrentValue(credentialsId);
         }
 
         public ListBoxModel doFillExecutionTypeItems() {

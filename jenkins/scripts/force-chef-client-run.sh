@@ -9,9 +9,12 @@
 #   CHEF360_TENANT_ID     Chef 360 tenant UUID
 #   CHEF360_API_KEY       API key (sent as 'api-key' header)
 #   CHEF360_API_SECRET    API secret (sent as 'api-secret' header)
-#   NODE_IDS              Comma-separated list of target node UUIDs (1..n)
+#   NODE_IDS              Comma-separated list of target node UUIDs (1..n).
+#                         Not required if TAG_NAME/TAG_VALUE are set instead.
 #
 # Optional env vars:
+#   TAG_NAME              node tag name to target instead of NODE_IDS, e.g. "role"
+#   TAG_VALUE             node tag value to target instead of NODE_IDS, e.g. "loadbalancer"
 #   EXECUTION_TYPE        sequential|parallel (default: parallel)
 #   BATCH_TYPE            percent|number (default: number)
 #   BATCH_VALUE           batch size value (default: number of nodes, i.e. all at once)
@@ -32,7 +35,20 @@ set -euo pipefail
 : "${CHEF360_TENANT_ID:?CHEF360_TENANT_ID is required}"
 : "${CHEF360_API_KEY:?CHEF360_API_KEY is required}"
 : "${CHEF360_API_SECRET:?CHEF360_API_SECRET is required}"
-: "${NODE_IDS:?NODE_IDS is required (comma-separated node UUIDs)}"
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Resolve NODE_IDS from a tag if it wasn't provided directly.
+if [[ -z "${NODE_IDS:-}" ]]; then
+  : "${TAG_NAME:?Either NODE_IDS or TAG_NAME/TAG_VALUE must be set}"
+  : "${TAG_VALUE:?Either NODE_IDS or TAG_NAME/TAG_VALUE must be set}"
+  echo "Resolving nodes with tag ${TAG_NAME}=${TAG_VALUE}..."
+  NODE_IDS=$(CHEF360_BASE_URL="$CHEF360_BASE_URL" CHEF360_API_KEY="$CHEF360_API_KEY" \
+    CHEF360_API_SECRET="$CHEF360_API_SECRET" CHEF360_ORG_ID="$CHEF360_ORG_ID" \
+    CHEF360_TENANT_ID="$CHEF360_TENANT_ID" TAG_NAME="$TAG_NAME" TAG_VALUE="$TAG_VALUE" \
+    "${SCRIPT_DIR}/resolve-nodes-by-tag.sh")
+  echo "Resolved node IDs: ${NODE_IDS}"
+fi
 
 EXECUTION_TYPE="${EXECUTION_TYPE:-parallel}"
 BATCH_TYPE="${BATCH_TYPE:-number}"

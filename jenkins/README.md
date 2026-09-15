@@ -11,10 +11,27 @@ completion.
    payload (see `POST /job-instances` in the Chef Courier Orchestrator API)
    targeting the given node UUIDs with a single step that runs `chef-client`
    via the `chef-client-interpreter` skill already installed on managed nodes.
+   If `NODE_IDS` is left blank, it resolves nodes by tag instead (see below).
 2. It submits the job instance, then polls
    `GET /instance/{instanceId}` on the Courier state service until the
    instance reports `success` or `failure` (or times out).
 3. `jenkins/Jenkinsfile` wraps the script as a parameterized Jenkins pipeline.
+
+## Targeting nodes by tag instead of raw UUIDs
+
+Rather than pasting node UUIDs into the `NODE_IDS` job parameter, you can
+target nodes by an existing tag (e.g. `role=loadbalancer`) — leave `NODE_IDS`
+blank and set `TAG_NAME`/`TAG_VALUE` (both default to `role`/`loadbalancer`).
+
+`jenkins/scripts/resolve-nodes-by-tag.sh` resolves the tag to node UUIDs by
+calling the Chef 360 Node Management API's ad-hoc filter endpoint
+(`POST /filters/exec`), matching an attribute filter against the `tags`
+namespace. `force-chef-client-run.sh` calls this automatically when `NODE_IDS`
+is empty.
+
+Verify the `tags` namespace name against your tenant (Node Management API →
+`GET /nodes/{nodeId}` shows a node's attributes/namespaces) and override with
+`TAG_NAMESPACE` if it differs.
 
 ## Jenkins setup
 
@@ -25,7 +42,8 @@ completion.
 3. Run the job with parameters:
    - `CHEF360_BASE_URL` — Chef 360 API gateway base URL
    - `CHEF360_ORG_ID` / `CHEF360_TENANT_ID` — from your Chef 360 org
-   - `NODE_IDS` — one or more node UUIDs (from the Node Management API/UI)
+   - `NODE_IDS` — one or more node UUIDs (from the Node Management API/UI),
+     or leave blank and use `TAG_NAME`/`TAG_VALUE` to target by tag
 
 ## Creating the Chef 360 credential for Jenkins
 

@@ -1,0 +1,50 @@
+<?jelly escape-by-default='true'?>
+<j:jelly xmlns:j="jelly:core" xmlns:f="/lib/form">
+  <f:entry title="Chef 360 base URL" field="chef360BaseUrl">
+    <f:textbox default="https://internal.cloud.chef.io" />
+  </f:entry>
+
+  <f:entry title="Organization UUID" field="chef360OrgId">
+    <f:textbox />
+  </f:entry>
+
+  <f:entry title="Tenant UUID" field="chef360TenantId">
+    <f:textbox />
+  </f:entry>
+
+  <f:entry title="API key/secret credential" field="credentialsId">
+    <f:select />
+  </f:entry>
+
+  <f:entry title="Node UUIDs (comma or newline separated)" field="nodeIds">
+    <f:textarea />
+  </f:entry>
+
+  <f:entry title="Tag name (used when Node UUIDs is blank)" field="tagName">
+    <f:textbox default="role" />
+  </f:entry>
+
+  <f:entry title="Tag value (used when Node UUIDs is blank)" field="tagValue">
+    <f:textbox default="loadbalancer" />
+  </f:entry>
+
+  <f:entry title="Execution type" field="executionType">
+    <f:select />
+  </f:entry>
+
+  <f:entry title="Per-node timeout (seconds)" field="timeoutSeconds">
+    <f:number default="900" />
+  </f:entry>
+
+  <f:entry title="Wait for completion" field="waitForCompletion">
+    <f:checkbox default="true" />
+  </f:entry>
+
+  <f:entry title="Poll interval (seconds)" field="pollIntervalSeconds">
+    <f:number default="15" />
+  </f:entry>
+
+  <f:entry title="Poll timeout (seconds)" field="pollTimeoutSeconds">
+    <f:number default="1800" />
+  </f:entry>
+</j:jelly>

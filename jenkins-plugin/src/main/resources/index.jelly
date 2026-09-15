@@ -1,0 +1,9 @@
+<?jelly escape-by-default='true'?>
+<div>
+  <p>
+    Chef 360 Push Jobs replaces the legacy Chef Push Jobs feature. It adds a
+    build step, "Force chef-client run (Chef 360 Courier)", that submits a job
+    instance to the Chef 360 Courier orchestrator API to run <code>chef-client</code>
+    on one or more managed nodes, then polls the Courier state service for completion.
+  </p>
+</div>

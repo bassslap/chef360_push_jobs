@@ -1,5 +1,5 @@
 <?jelly escape-by-default='true'?>
-<j:jelly xmlns:j="jelly:core" xmlns:f="/lib/form">
+<j:jelly xmlns:j="jelly:core" xmlns:f="/lib/form" xmlns:c="/lib/credentials">
   <f:entry title="Chef 360 base URL" field="chef360BaseUrl">
     <f:textbox default="https://internal.cloud.chef.io" />
   </f:entry>
@@ -13,7 +13,7 @@
   </f:entry>
 
   <f:entry title="API key/secret credential" field="credentialsId">
-    <f:select />
+    <c:select checkMethod="post" />
   </f:entry>
 
   <f:entry title="Node UUIDs (comma or newline separated)" field="nodeIds">

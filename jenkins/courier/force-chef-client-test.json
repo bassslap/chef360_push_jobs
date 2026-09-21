@@ -1,0 +1,58 @@
+{
+  "name": "manual-role-blue-force-chef-client-test",
+  "description": "Manual Courier test job to force Chef Client run",
+  "scheduleRule": "RRULE:FREQ=DAILY;INTERVAL=1",
+  "allowManualExecution": true,
+  "exceptionRules": [
+    {
+      "duration": 1,
+      "rrule": "RRULE:FREQ=WEEKLY;BYDAY=SU"
+    }
+  ],
+  "target": {
+    "executionType": "parallel",
+    "groups": [
+      {
+        "timeoutSeconds": 900,
+        "batchSize": {
+          "type": "percent",
+          "value": 100
+        },
+        "distributionMethod": "batching",
+        "earlyTermination": false,
+        "successCriteria": [
+          {
+            "status": "success",
+            "numRuns": {
+              "type": "percent",
+              "value": 100
+            }
+          }
+        ],
+        "filter": {},
+        "filterId": "229fdc3c-4d1b-4f31-a38a-8063716e60d0",
+        "nodeListType": "savedFilter"
+      }
+    ]
+  },
+  "actions": {
+    "accessMode": "agent",
+    "steps": [
+      {
+        "name": "run-chef-client",
+        "description": "Run Chef Infra Client",
+        "interpreter": {
+          "name": "chef-platform/chef-client-interpreter",
+          "skill": {
+            "minVersion": "17.0.0",
+            "maxVersion": "19.99.99"
+          }
+        },
+        "command": {
+          "exec": "run"
+        },
+        "retryCount": 1
+      }
+    ]
+  }
+}

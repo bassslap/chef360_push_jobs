@@ -72,8 +72,8 @@ public class ForceChefClientRunBuilder extends Builder implements SimpleBuildSte
     private int timeoutSeconds = 900;
     private int successPercent = 100;
     private String interpreterName = "chef/courier-interpreter/chef-client";
-    private String interpreterMinVersion = "1.0.0";
-    private String interpreterMaxVersion = "2.0.0";
+    private String interpreterMinVersion = "17.0.0";
+    private String interpreterMaxVersion = "19.99.99";
     private boolean waitForCompletion = true;
     private int pollIntervalSeconds = 15;
     private int pollTimeoutSeconds = 1800;
@@ -232,7 +232,7 @@ public class ForceChefClientRunBuilder extends Builder implements SimpleBuildSte
             JsonNode triggered = runCourierCli(home, mapper, log,
                     "scheduler", "jobs", "create-manual-job", "--profile", "chef-org",
                     "--body-file", manualFile.toString(), "--format", "json");
-            log.println("[chef360] Courier manual job accepted: " + triggered);
+            log.println("[chef360] Jenkins-to-Courier job created successfully: " + triggered);
             if (waitForCompletion) {
                 pollCourierCli(home, mapper, jobId, log);
             }
@@ -338,6 +338,10 @@ public class ForceChefClientRunBuilder extends Builder implements SimpleBuildSte
 
         String effectiveInterpreterName = "chef/courier-interpreter/chef-client".equals(interpreterName)
             ? "chef-platform/chef-client-interpreter" : interpreterName;
+        String effectiveMinVersion = "1.0.0".equals(interpreterMinVersion)
+            ? "17.0.0" : interpreterMinVersion;
+        String effectiveMaxVersion = "2.0.0".equals(interpreterMaxVersion)
+            ? "19.99.99" : interpreterMaxVersion;
 
         ObjectNode target = mapper.createObjectNode();
         target.put("executionType", executionType);
@@ -373,12 +377,12 @@ public class ForceChefClientRunBuilder extends Builder implements SimpleBuildSte
         ObjectNode interpreter = mapper.createObjectNode();
         interpreter.put("name", effectiveInterpreterName);
         ObjectNode skill = mapper.createObjectNode();
-        skill.put("minVersion", interpreterMinVersion);
-        skill.put("maxVersion", interpreterMaxVersion);
+        skill.put("minVersion", effectiveMinVersion);
+        skill.put("maxVersion", effectiveMaxVersion);
         interpreter.set("skill", skill);
         step.set("interpreter", interpreter);
         ObjectNode command = mapper.createObjectNode();
-        command.put("exec", "chef-client");
+        command.put("exec", "run");
         step.set("command", command);
         step.put("retryCount", 1);
         steps.add(step);

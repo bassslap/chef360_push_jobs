@@ -28,7 +28,14 @@ import org.kohsuke.stapler.QueryParameter;
 import org.kohsuke.stapler.verb.POST;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.PrintStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.charset.StandardCharsets;
+import java.security.KeyStore;
+import java.security.cert.Certificate;
+import java.security.cert.CertificateFactory;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -37,8 +44,12 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Base64;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManagerFactory;
 
 /**
  * Forces a chef-client run on 1..n Chef 360 managed nodes by submitting a job
@@ -54,6 +65,7 @@ public class ForceChefClientRunBuilder extends Builder implements SimpleBuildSte
     private final String credentialsId;
 
     private String nodeIds = "";
+    private String caFile = "";
     private String tagName = "role";
     private String tagValue = "";
     private String executionType = "parallel";
@@ -69,6 +81,7 @@ public class ForceChefClientRunBuilder extends Builder implements SimpleBuildSte
     private String statePath = "/courier/state-api/v1";
     private String nodeManagementPath = "/node/management/v1";
     private String tagNamespace = "tags";
+    private String courierCliPath = "/usr/local/bin/chef-courier-cli";
 
     @DataBoundConstructor
     public ForceChefClientRunBuilder(String chef360BaseUrl, String chef360OrgId, String chef360TenantId, String credentialsId) {
@@ -91,6 +104,10 @@ public class ForceChefClientRunBuilder extends Builder implements SimpleBuildSte
     public String getNodeIds() { return nodeIds; }
     @DataBoundSetter
     public void setNodeIds(String nodeIds) { this.nodeIds = nodeIds; }
+
+    public String getCaFile() { return caFile; }
+    @DataBoundSetter
+    public void setCaFile(String caFile) { this.caFile = caFile; }
 
     public String getTagName() { return tagName; }
     @DataBoundSetter
@@ -124,12 +141,21 @@ public class ForceChefClientRunBuilder extends Builder implements SimpleBuildSte
     @DataBoundSetter
     public void setInterpreterName(String interpreterName) { this.interpreterName = interpreterName; }
 
+    public String getCourierCliPath() { return courierCliPath; }
+    @DataBoundSetter
+    public void setCourierCliPath(String courierCliPath) { this.courierCliPath = courierCliPath; }
+
     @Override
     public void perform(Run<?, ?> run, FilePath workspace, Launcher launcher, TaskListener listener)
             throws InterruptedException, IOException {
         PrintStream log = listener.getLogger();
         ObjectMapper mapper = new ObjectMapper();
-        HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(30)).build();
+        HttpClient.Builder httpBuilder = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(30));
+        if (caFile != null && !caFile.trim().isEmpty()) {
+            httpBuilder.sslContext(sslContextForCa(Path.of(caFile.trim())));
+            log.println("[chef360] Using custom CA certificate: " + caFile.trim());
+        }
+        HttpClient http = httpBuilder.build();
 
         StringCredentials apiKeyCred = CredentialsProvider.findCredentialById(credentialsId, StringCredentials.class, run);
         if (apiKeyCred == null) {
@@ -153,40 +179,115 @@ public class ForceChefClientRunBuilder extends Builder implements SimpleBuildSte
 
         log.println("[chef360] Submitting Courier job instance " + instanceId + " for " + ids.size() + " node(s): " + ids);
 
-        HttpRequest submit = baseRequestBuilder(chef360BaseUrl + orchestratorPath + "/job-instances", apiKey, apiSecret)
-                .POST(HttpRequest.BodyPublishers.ofString(payload))
-                .build();
-        HttpResponse<String> submitResponse = send(http, submit);
-        log.println("[chef360] Orchestrator response: HTTP " + submitResponse.statusCode());
-        if (submitResponse.statusCode() != 200 && submitResponse.statusCode() != 201) {
-            log.println(submitResponse.body());
-            throw new IOException("Failed to submit job instance (HTTP " + submitResponse.statusCode() + ")");
-        }
+        submitViaCourierCli(mapper, payload, apiKey, apiSecret, log);
+    }
 
-        if (!waitForCompletion) {
-            return;
-        }
+    private void submitViaCourierCli(ObjectMapper mapper, String payload, String apiKey,
+                                     String apiSecret, PrintStream log) throws IOException, InterruptedException {
+        String cliPath = courierCliPath == null || courierCliPath.trim().isEmpty()
+            ? "/usr/local/bin/chef-courier-cli" : courierCliPath.trim();
+        Path home = Files.createTempDirectory("chef360-courier-");
+        Path credentialsDir = home.resolve(".chef-platform");
+        Files.createDirectories(credentialsDir);
+        String profile = "[chef-org]\n"
+                + "DeviceId = \"jenkins\"\n"
+                + "Url = \"" + chef360BaseUrl + "\"\n"
+                + "AccessKey = \"" + apiKey + "\"\n"
+                + "SecretKey = \"" + apiSecret + "\"\n"
+                + "TenantId = \"" + chef360TenantId + "\"\n"
+                + "OrgName = \"chef-org\"\n"
+                + "OrgId = \"" + chef360OrgId + "\"\n";
+        Files.write(credentialsDir.resolve("credentials"),
+            Base64.getEncoder().encode(profile.getBytes(StandardCharsets.UTF_8)));
+        Path jobFile = home.resolve("job.json");
+        ObjectNode job = (ObjectNode) mapper.readTree(payload);
+        job.put("name", "jenkins-force-chef-client-" + UUID.randomUUID());
+        job.put("description", "Jenkins force chef-client run");
+        job.put("scheduleRule", "RRULE:FREQ=DAILY;INTERVAL=1");
+        job.put("allowManualExecution", true);
+        ArrayNode exceptions = job.putArray("exceptionRules");
+        ObjectNode exception = exceptions.addObject();
+        exception.put("duration", 1);
+        exception.put("rrule", "RRULE:FREQ=WEEKLY;BYDAY=SU");
+        Files.writeString(jobFile, mapper.writeValueAsString(job), StandardCharsets.UTF_8);
 
-        log.println("[chef360] Polling for completion (timeout " + pollTimeoutSeconds + "s)...");
+        try {
+            log.println("[chef360] Creating Courier scheduler job through " + cliPath + "...");
+            JsonNode created = runCourierCli(home, mapper, log,
+                    "scheduler", "jobs", "add-job", "--profile", "chef-org",
+                    "--body-file", jobFile.toString(), "--format", "json");
+            String jobId = created.path("item").path("id").asText("");
+            if (jobId.isEmpty()) {
+                throw new IOException("Courier scheduler did not return a job id: " + created);
+            }
+
+            ObjectNode manual = mapper.createObjectNode();
+            manual.put("jobId", jobId);
+            manual.put("orgId", chef360OrgId);
+            manual.put("tenantId", chef360TenantId);
+            manual.put("triggeredAt", java.time.Instant.now().toString());
+            manual.put("triggeredBy", "jenkins");
+            Path manualFile = home.resolve("manual.json");
+            Files.writeString(manualFile, mapper.writeValueAsString(manual), StandardCharsets.UTF_8);
+            JsonNode triggered = runCourierCli(home, mapper, log,
+                    "scheduler", "jobs", "create-manual-job", "--profile", "chef-org",
+                    "--body-file", manualFile.toString(), "--format", "json");
+            log.println("[chef360] Courier manual job accepted: " + triggered);
+            if (waitForCompletion) {
+                pollCourierCli(home, mapper, jobId, log);
+            }
+        } finally {
+            deleteTree(home);
+        }
+    }
+
+    private JsonNode runCourierCli(Path home, ObjectMapper mapper, PrintStream log, String... args)
+            throws IOException, InterruptedException {
+        String cliPath = courierCliPath == null || courierCliPath.trim().isEmpty()
+            ? "/usr/local/bin/chef-courier-cli" : courierCliPath.trim();
+        List<String> command = new ArrayList<>();
+        command.add(cliPath);
+        command.addAll(Arrays.asList(args));
+        ProcessBuilder processBuilder = new ProcessBuilder(command).redirectErrorStream(true);
+        processBuilder.environment().put("HOME", home.toString());
+        processBuilder.environment().put("PATH", "/usr/local/bin:/usr/bin:/bin");
+        Process process = processBuilder.start();
+        String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        int exit = process.waitFor();
+        if (exit != 0) {
+            throw new IOException("Courier CLI failed (" + exit + "): " + output);
+        }
+        return mapper.readTree(output);
+    }
+
+    private void pollCourierCli(Path home, ObjectMapper mapper, String jobId, PrintStream log)
+            throws IOException, InterruptedException {
         long deadline = System.currentTimeMillis() + pollTimeoutSeconds * 1000L;
         while (System.currentTimeMillis() < deadline) {
-            HttpRequest statusReq = baseRequestBuilder(chef360BaseUrl + statePath + "/instance/" + instanceId, apiKey, apiSecret)
-                    .GET().build();
-            HttpResponse<String> statusResp = send(http, statusReq);
-            if (statusResp.statusCode() == 200) {
-                JsonNode item = mapper.readTree(statusResp.body()).path("item");
-                String status = item.path("status").asText("");
+            JsonNode result = runCourierCli(home, mapper, log,
+                    "state", "instance", "list-all", "--profile", "chef-org",
+                    "--job-id", jobId, "--pagination.size", "10", "--format", "json");
+            JsonNode items = result.path("items");
+            if (items.isArray() && items.size() > 0) {
+                JsonNode latest = items.get(items.size() - 1);
+                String status = latest.path("status").asText("");
                 log.println("[chef360]   instance status: " + status);
-                if ("success".equals(status)) {
-                    return;
-                }
+                if ("success".equals(status)) return;
                 if ("failure".equals(status)) {
-                    throw new IOException("Job instance " + instanceId + " reported failure");
+                    throw new IOException("Courier job instance reported failure: " + latest);
                 }
             }
             Thread.sleep(pollIntervalSeconds * 1000L);
         }
-        throw new IOException("Timed out waiting for job instance " + instanceId + " to complete");
+        throw new IOException("Timed out waiting for Courier job completion");
+    }
+
+    private void deleteTree(Path root) {
+        try (var paths = Files.walk(root)) {
+            paths.sorted(java.util.Comparator.reverseOrder()).forEach(path -> {
+                try { Files.deleteIfExists(path); } catch (IOException ignored) { }
+            });
+        } catch (IOException ignored) { }
     }
 
     private List<String> resolveNodeIds(HttpClient http, ObjectMapper mapper, String apiKey, String apiSecret, PrintStream log) throws IOException, InterruptedException {
@@ -235,6 +336,9 @@ public class ForceChefClientRunBuilder extends Builder implements SimpleBuildSte
         root.put("jobId", jobId);
         root.put("name", "force-chef-client-run");
 
+        String effectiveInterpreterName = "chef/courier-interpreter/chef-client".equals(interpreterName)
+            ? "chef-platform/chef-client-interpreter" : interpreterName;
+
         ObjectNode target = mapper.createObjectNode();
         target.put("executionType", executionType);
         ArrayNode groups = target.putArray("groups");
@@ -267,7 +371,7 @@ public class ForceChefClientRunBuilder extends Builder implements SimpleBuildSte
         step.put("name", "run-chef-client");
         step.put("description", "Force a chef-client run (Chef Push Jobs replacement)");
         ObjectNode interpreter = mapper.createObjectNode();
-        interpreter.put("name", interpreterName);
+        interpreter.put("name", effectiveInterpreterName);
         ObjectNode skill = mapper.createObjectNode();
         skill.put("minVersion", interpreterMinVersion);
         skill.put("maxVersion", interpreterMaxVersion);
@@ -297,6 +401,24 @@ public class ForceChefClientRunBuilder extends Builder implements SimpleBuildSte
 
     private HttpResponse<String> send(HttpClient http, HttpRequest request) throws IOException, InterruptedException {
         return http.send(request, HttpResponse.BodyHandlers.ofString());
+    }
+
+    private SSLContext sslContextForCa(Path caPath) throws IOException {
+        try (InputStream certificateInput = Files.newInputStream(caPath)) {
+            Certificate certificate = CertificateFactory.getInstance("X.509")
+                    .generateCertificate(certificateInput);
+            KeyStore trustStore = KeyStore.getInstance(KeyStore.getDefaultType());
+            trustStore.load(null, null);
+            trustStore.setCertificateEntry("chef360-custom-ca", certificate);
+            TrustManagerFactory trustManagers = TrustManagerFactory.getInstance(
+                    TrustManagerFactory.getDefaultAlgorithm());
+            trustManagers.init(trustStore);
+            SSLContext sslContext = SSLContext.getInstance("TLS");
+            sslContext.init(null, trustManagers.getTrustManagers(), null);
+            return sslContext;
+        } catch (Exception e) {
+            throw new IOException("Could not load CA certificate '" + caPath + "'", e);
+        }
     }
 
     @Extension

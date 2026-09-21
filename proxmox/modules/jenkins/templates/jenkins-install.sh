@@ -28,6 +28,7 @@ docker volume create jenkins_home
 docker run -d \
   --name jenkins \
   --restart unless-stopped \
+  --add-host chef-tenant.lab.local:10.100.2.50 \
   -p 8080:8080 \
   -p 50000:50000 \
   -v jenkins_home:/var/jenkins_home \

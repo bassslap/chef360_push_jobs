@@ -12,6 +12,10 @@
     <f:textbox />
   </f:entry>
 
+  <f:entry title="CA certificate file (optional)" field="caFile">
+    <f:textbox />
+  </f:entry>
+
   <f:entry title="API key/secret credential" field="credentialsId">
     <c:select checkMethod="post" />
   </f:entry>

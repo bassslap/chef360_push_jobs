@@ -81,8 +81,98 @@ workstation is required — it authenticates to the Courier orchestrator API
 directly as a service identity using an Application Key (`accessKey`/
 `secretKey`), sent as the `api-key`/`api-secret` headers.
 
-Run `jenkins/scripts/create-chef360-application-key.sh` once (from a machine
-with access to your Chef 360 tenant) to mint that key:
+There are two practical ways to obtain that credential:
+
+1. use the `chef-platform-auth-cli` device registration flow on the Jenkins
+   runtime itself, or
+2. run `jenkins/scripts/create-chef360-application-key.sh` from a machine with
+   a valid tenant login.
+
+### Installing the CLI tools inside the Jenkins container
+
+The stock Jenkins container image is intentionally minimal and does not ship
+with `sudo`, so the bundled installer script fails unless the script is
+patched to skip the `sudo` call. The working approach is to install the CLI
+as root in the container and then register the container as its own device.
+
+For the next container build, add both `bash-completion` and `jq` to the
+container startup so the shell is ready for CLI interaction and JSON parsing:
+
+```dockerfile
+RUN apt-get update && apt-get install -y bash-completion jq && \
+    echo 'if [ -f /etc/bash_completion ] && ! shopt -oq posix; then . /etc/bash_completion; fi' >> /var/jenkins_home/.bashrc
+```
+
+This ensures the Jenkins shell loads completions and `jq` is available for any
+CLI requests or troubleshooting in the container.
+
+
+Install the auth CLI:
+
+```bash
+# run from the Jenkins container as root
+curl -sk https://internal.cloud.chef.io/platform/bundledtools/v1/static/install.sh \
+  -o /tmp/install.sh
+chmod +x /tmp/install.sh
+sed -i 's/sudo //g' /tmp/install.sh
+INSTALL_DIR=/opt/chef-360 BIN_DIR=/usr/local/bin \
+  TOOL="chef-platform-auth-cli" \
+  SERVER="https://internal.cloud.chef.io" \
+  VERSION="latest" \
+  /tmp/install.sh
+```
+
+This installs the `chef-platform-auth-cli` binary successfully in the
+container even though the stock image lacks `sudo`.
+
+Install the Courier CLI as well for manual validation and debugging:
+
+```bash
+# run from the Jenkins container as root
+curl -sk https://internal.cloud.chef.io/platform/bundledtools/v1/static/install.sh \
+  -o /tmp/install-courier.sh
+chmod +x /tmp/install-courier.sh
+sed -i 's/sudo //g' /tmp/install-courier.sh
+INSTALL_DIR=/opt/chef-360 BIN_DIR=/usr/local/bin \
+  TOOL="chef-courier-cli" \
+  SERVER="https://internal.cloud.chef.io" \
+  VERSION="latest" \
+  /tmp/install-courier.sh
+```
+
+This gives the Jenkins runtime both the `chef-platform-auth-cli` and the
+`chef-courier-cli` utilities so you can validate authorization and submit job
+operations directly from the same container.
+
+### Registering the Jenkins device in Chef 360
+
+Once the CLI is installed, register the Jenkins container as a device for the
+`phillips-sa` profile:
+
+```bash
+chef-platform-auth-cli register-device \
+  --device-name jenkins-01 \
+  --profile-name phillips-sa \
+  --url https://internal.cloud.chef.io
+```
+
+Authorize the device in the browser when prompted. The command will then print
+`AccessKey` and `SecretKey` for the device profile. Store the value in Jenkins
+as a single Secret Text credential in the exact format:
+
+```text
+<accessKey>:<secretKey>
+```
+
+This is the format the Jenkins plugin expects in
+`ForceChefClientRunBuilder.perform()` before it sends the `api-key` and
+`api-secret` headers.
+
+### Alternative: minting an application key from a tenant login
+
+If you prefer the direct script-based flow, run
+`jenkins/scripts/create-chef360-application-key.sh` once (from a machine with
+access to your Chef 360 tenant) to mint that key:
 
 ```bash
 export CHEF360_BASE_URL=https://internal.cloud.chef.io
@@ -96,9 +186,8 @@ export ROLE_ID=<role-uuid-to-grant>
 
 The script logs in, exchanges the oauth code for a JWT, then calls
 `POST /application-key` to create a scoped, expiring automation credential.
-The `secretKey` is only shown once — copy it immediately into the
-`chef360-api-secret` Jenkins credential (and `accessKey` into
-`chef360-api-key`).
+The `secretKey` is only shown once — copy it immediately into the Jenkins
+credential as `accessKey:secretKey`.
 
 ## Verify before first real run
 
@@ -110,3 +199,7 @@ The `secretKey` is only shown once — copy it immediately into the
 - `ORCHESTRATOR_PATH` / `STATE_PATH` default to `/courier/orchestrator-api/v1`
   and `/courier/state-api/v1`. Confirm actual routing through your Chef 360
   API gateway.
+- For the local lab's private certificate, set the plugin's optional `CA
+  certificate file` field to the absolute path of the downloaded `root-ca.crt`
+  inside the Jenkins container, such as `/root/root-ca.crt`. Leave it blank
+  for endpoints signed by a CA already trusted by the JVM.

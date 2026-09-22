@@ -61,7 +61,7 @@ Before publishing screenshots, replace internal hostnames, IP addresses, UUIDs, 
 
 ## Why this exists
 
-The legacy Chef Push Jobs feature was a convenient way to trigger remote `chef-client` executions. This repo demonstrates an equivalent pattern using the modern Chef 360 Courier orchestration model and Jenkins as the trigger layer.
+The legacy Chef Push Jobs feature was a convenient way to trigger remote `chef-client` executions ad hoc and on demand, either through manual execution or from a triggered pipeline. This repo demonstrates an equivalent pattern using the modern Chef 360 Courier orchestration model and Jenkins as the trigger layer.
 
 ## POC scope
 

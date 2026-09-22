@@ -2,10 +2,11 @@
 
 > **Helper scripts:** The shell scripts in this directory support an optional scripted Jenkins Pipeline and one-time setup tasks. The native Jenkins plugin in `jenkins-plugin/` is the primary integration path.
 
-Replaces the legacy Chef Push Jobs feature: this Jenkins job forces a
-`chef-client` run on 1..n nodes by submitting a job instance to the Chef 360
-Courier orchestrator API, then polls the Courier state service for
-completion.
+Replaces the legacy Chef Push Jobs feature, which enabled ad hoc and on-demand
+remote `chef-client` runs through manual execution or a triggered pipeline.
+This Jenkins job submits a job instance to the Chef 360 Courier orchestrator
+API for a `chef-client` run on 1..n nodes, then polls the Courier state service
+for completion.
 
 ## How it works
 

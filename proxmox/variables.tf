@@ -1,5 +1,5 @@
 /*************************************
-      Chef Push Jobs Replacement - Jenkins on Proxmox
+      Chef 360 Courier + Jenkins POC - Jenkins server on Proxmox
 **************************************/
 
 variable "tags" {

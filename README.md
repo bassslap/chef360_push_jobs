@@ -14,14 +14,14 @@ This is not a production-grade replacement for all Chef Push Jobs behaviors. It 
 - The job targets node UUIDs or a saved tag filter
 - A Courier step runs the `chef-client` interpreter on the managed nodes
 - Jenkins polls the Courier state API until the job succeeds or fails
-- Optional Proxmox/OpenTofu files provision the Jenkins server used for the POC
+- Optional Proxmox/OpenTofu files provision the Jenkins server used for the POC; you can use your own compute in AWS, Azure, GCP, or another environment instead
 
 ## Key components
 
 - `jenkins-plugin/` – Jenkins plugin that resolves nodes, creates the Courier job, and polls for completion
 - `jenkins/` – optional scripted Pipeline workflow and Courier validation examples
 - `jenkins/courier/` – sample Courier payload JSON used for test execution
-- `proxmox/` – optional OpenTofu/Terraform definitions for provisioning the Jenkins server
+- `proxmox/` – optional OpenTofu/Terraform definitions for provisioning the Jenkins server; fork the repository to add modules for your preferred cloud or platform, or provision Jenkins manually
 
 The Jenkins plugin is the primary integration. The shell scripts under `jenkins/scripts/` are optional helpers for teams that prefer a scripted Pipeline or need one-time credential and tenant setup:
 
@@ -74,6 +74,7 @@ The legacy Chef Push Jobs feature was a convenient way to trigger remote `chef-c
 
 - The repository includes example payloads and scripts for validating the integration
 - The Proxmox/OpenTofu configuration is only used to provision the Jenkins server for the POC
+- Proxmox is not required; use existing compute, manually provision Jenkins, or contribute a module for AWS, Azure, GCP, or another platform
 - The implementation intentionally focuses on the Courier API integration path
 - Any customer or tenant-specific values should be replaced before reuse outside the lab
 

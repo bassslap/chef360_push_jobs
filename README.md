@@ -47,17 +47,25 @@ These screenshots show the POC workflow from Jenkins configuration through succe
 
 Before publishing screenshots, replace internal hostnames, IP addresses, UUIDs, node names, usernames, and credential identifiers with representative values.
 
-### Jenkins configuration
+### Jenkins job configuration
 
-![Jenkins Chef 360 Courier build-step configuration](docs/screenshots/jenkins-configuration.png)
+![Jenkins Chef 360 Courier build-step configuration](docs/screenshots/jenkins_job_order_form.png)
 
 ### Successful Jenkins build
 
-![Successful Jenkins build triggering a Courier job](docs/screenshots/jenkins-successful-build.png)
+![Successful Jenkins build triggering a Courier job](docs/screenshots/Jenkins_console.png)
+
+### Courier job definition
+
+![Chef 360 Courier job definition for running chef-client](docs/screenshots/courier_job.png)
 
 ### Successful Courier run
 
-![Successful Courier run on two managed nodes](docs/screenshots/courier-successful-run.png)
+![Successful Courier run on two managed nodes](docs/screenshots/courrier_job_passes.png)
+
+### Managed node details
+
+![Managed node details after the run](docs/screenshots/DSM_client_immediate_run.png)
 
 ## Why this exists
 
